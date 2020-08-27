@@ -52,7 +52,7 @@ Engine::~Engine(){
 
 void Engine::init() {
 
-	
+
 	//Init system
 	sys->init("Out Of This World");
 
@@ -68,12 +68,15 @@ void Engine::init() {
 
 	player.init();
 
-	//Init virtual machine, legacy way
-	vm.initForPart(GAME_PART_FIRST); // This game part is the protection screen
+	uint16_t part = GAME_PART1;  // This game part is the protection screen
+#ifdef BYPASS_PROTECTION
+  part = GAME_PART2;
+#endif
+  vm.initForPart(part);
 
 
 
-	// Try to cheat here. You can jump anywhere but the VM crashes afterward.
+  // Try to cheat here. You can jump anywhere but the VM crashes afterward.
 	// Starting somewhere is probably not enough, the variables and calls return are probably missing.
 	//vm.initForPart(GAME_PART2); // Skip protection screen and go directly to intro
 	//vm.initForPart(GAME_PART3); // CRASH
@@ -99,10 +102,6 @@ void Engine::processInput() {
 	if (sys->input.save) {
 		saveGameState(_stateSlot, "quicksave");
 		sys->input.save = false;
-	}
-	if (sys->input.fastMode) {
-		vm._fastMode = !vm._fastMode;
-		sys->input.fastMode = false;
 	}
 	if (sys->input.stateSlot != 0) {
 		int8_t slot = _stateSlot + sys->input.stateSlot;
@@ -180,10 +179,4 @@ void Engine::loadGameState(uint8_t slot) {
 			debug(DBG_INFO, "Loaded state from slot %d", _stateSlot);
 		}
 	}
-}
-
-
-const char* Engine::getDataDir()
-{
-	return this->_dataDir;
 }

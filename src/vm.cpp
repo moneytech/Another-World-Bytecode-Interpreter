@@ -36,8 +36,15 @@ void VirtualMachine::init() {
 	memset(vmVariables, 0, sizeof(vmVariables));
 	vmVariables[0x54] = 0x81;
 	vmVariables[VM_VARIABLE_RANDOM_SEED] = time(0);
+#ifdef BYPASS_PROTECTION
+   // these 3 variables are set by the game code
+   vmVariables[0xBC] = 0x10;
+   vmVariables[0xC6] = 0x80;
+   vmVariables[0xF2] = 4000;
+   // these 2 variables are set by the engine executable
+   vmVariables[0xDC] = 33;
+#endif
 
-	_fastMode = false;
 	player->_markVar = &vmVariables[VM_VARIABLE_MUS_MARK];
 }
 
@@ -132,42 +139,18 @@ void VirtualMachine::op_jnz() {
 	}
 }
 
-#define BYPASS_PROTECTION
 void VirtualMachine::op_condJmp() {
-	
-	//printf("Jump : %X \n",_scriptPtr.pc-res->segBytecode);
-//FCS Whoever wrote this is patching the bytecode on the fly. This is ballzy !!
-#ifdef BYPASS_PROTECTION
-	
-	if (res->currentPartId == GAME_PART_FIRST && _scriptPtr.pc == res->segBytecode + 0xCB9) {
-		
-		// (0x0CB8) condJmp(0x80, VAR(41), VAR(30), 0xCD3)
-		*(_scriptPtr.pc + 0x00) = 0x81;
-		*(_scriptPtr.pc + 0x03) = 0x0D;
-		*(_scriptPtr.pc + 0x04) = 0x24;
-		// (0x0D4E) condJmp(0x4, VAR(50), 6, 0xDBC)		
-		*(_scriptPtr.pc + 0x99) = 0x0D;
-		*(_scriptPtr.pc + 0x9A) = 0x5A;
-		printf("VirtualMachine::op_condJmp() bypassing protection");
-		printf("bytecode has been patched/n");
-		
-		//this->bypassProtection() ;
-	}
-	
-	
-#endif
-
 	uint8_t opcode = _scriptPtr.fetchByte();
-	int16_t b = vmVariables[_scriptPtr.fetchByte()];
-	uint8_t c = _scriptPtr.fetchByte();	
+  const uint8_t var = _scriptPtr.fetchByte();
+  int16_t b = vmVariables[var];
 	int16_t a;
 
 	if (opcode & 0x80) {
-		a = vmVariables[c];
+		a = vmVariables[_scriptPtr.fetchByte()];
 	} else if (opcode & 0x40) {
-		a = c * 256 + _scriptPtr.fetchByte();
+    a = _scriptPtr.fetchWord();
 	} else {
-		a = c;
+    a = _scriptPtr.fetchByte();
 	}
 	debug(DBG_VM, "VirtualMachine::op_condJmp(%d, 0x%02X, 0x%02X)", opcode, b, a);
 
@@ -176,6 +159,26 @@ void VirtualMachine::op_condJmp() {
 	switch (opcode & 7) {
 	case 0:	// jz
 		expr = (b == a);
+#ifdef BYPASS_PROTECTION
+      if (res->currentPartId == 16000) {
+        //
+        // 0CB8: jmpIf(VAR(0x29) == VAR(0x1E), @0CD3)
+        // ...
+        //
+        if (b == 0x29 && (opcode & 0x80) != 0) {
+          // 4 symbols
+          vmVariables[0x29] = vmVariables[0x1E];
+          vmVariables[0x2A] = vmVariables[0x1F];
+          vmVariables[0x2B] = vmVariables[0x20];
+          vmVariables[0x2C] = vmVariables[0x21];
+          // counters
+          vmVariables[0x32] = 6;
+          vmVariables[0x64] = 20;
+          warning("Script::op_condJmp() bypassing protection");
+          expr = true;
+        }
+      }
+#endif
 		break;
 	case 1: // jnz
 		expr = (b != a);
@@ -274,29 +277,17 @@ void VirtualMachine::op_blitFramebuffer() {
 	debug(DBG_VM, "VirtualMachine::op_blitFramebuffer(%d)", pageId);
 	inp_handleSpecialKeys();
 
-	//Nasty hack....was this present in the original assembly  ??!!
-	if (res->currentPartId == GAME_PART_FIRST && vmVariables[0x67] == 1) 
-		vmVariables[0xDC] = 0x21;
-	
-	if (!_fastMode) {
+  int32_t delay = sys->getTimeStamp() - lastTimeStamp;
+  int32_t timeToSleep = vmVariables[VM_VARIABLE_PAUSE_SLICES] * 20 - delay;
 
-		int32_t delay = sys->getTimeStamp() - lastTimeStamp;
-		int32_t timeToSleep = vmVariables[VM_VARIABLE_PAUSE_SLICES] * 20 - delay;
+  // The bytecode will set vmVariables[VM_VARIABLE_PAUSE_SLICES] from 1 to 5
+  // The virtual machine hence indicate how long the image should be displayed.
 
-		// The bytecode will set vmVariables[VM_VARIABLE_PAUSE_SLICES] from 1 to 5
-		// The virtual machine hence indicate how long the image should be displayed.
+  if (timeToSleep > 0) {
+    sys->sleep(timeToSleep);
+  }
 
-		//printf("vmVariables[VM_VARIABLE_PAUSE_SLICES]=%d\n",vmVariables[VM_VARIABLE_PAUSE_SLICES]);
-
-
-		if (timeToSleep > 0)
-		{
-		//	printf("Sleeping for=%d\n",timeToSleep);
-			sys->sleep(timeToSleep);
-		}
-
-		lastTimeStamp = sys->getTimeStamp();
-	}
+  lastTimeStamp = sys->getTimeStamp();
 
 	//WTF ?
 	vmVariables[0xF7] = 0;
@@ -725,21 +716,3 @@ void VirtualMachine::saveOrLoad(Serializer &ser) {
 	};
 	ser.saveOrLoadEntries(entries);
 }
-
-void VirtualMachine::bypassProtection() 
-{
-	File f(true);
-
-	if (!f.open("bank0e", res->getDataDir(), "rb")) {
-		warning("Unable to bypass protection: add bank0e file to datadir");
-	} else {
-		Serializer s(&f, Serializer::SM_LOAD, res->_memPtrStart, 2);
-		this->saveOrLoad(s);
-		res->saveOrLoad(s);
-		video->saveOrLoad(s);
-		player->saveOrLoad(s);
-		mixer->saveOrLoad(s);
-	}
-	f.close();
-}
-

@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
 		if (strlen(argv[i]) >= 2) {
 			opt |= parseOption(argv[i], "datapath=", &dataPath);
 			opt |= parseOption(argv[i], "savepath=", &savePath);
+
 		}
 		if (!opt) {
 			printf("%s",USAGE);
@@ -62,7 +63,6 @@ int main(int argc, char *argv[]) {
 	}
 	//FCS
 	//g_debugMask = DBG_INFO; // DBG_VM | DBG_BANK | DBG_VIDEO | DBG_SER | DBG_SND
-	g_debugMask = DBG_RES ;
 	//g_debugMask = 0 ;//DBG_INFO |  DBG_VM | DBG_BANK | DBG_VIDEO | DBG_SER | DBG_SND ;
 	
 	Engine* e = new Engine(stub, dataPath, savePath);
@@ -158,13 +158,6 @@ int main(int argc, char *argv[]) {
 	   Since the virtal machine and SDL are running simultaneously in two different threads:
 	   Any read or write to an elements of the sound channels MUST be synchronized with a 
 	   mutex.
-
-   FastMode :
-   ==========
-
-   The game engine features a "fast-mode"...what it to be able to respond to the now defunct
-   TURBO button commonly found on 386/486 era PC ?!
-
 
    Endianess:
    ==========
@@ -280,7 +273,6 @@ int main(int argc, char *argv[]) {
    TODO :
    ======
 
-       - Remove protection.
 	   - Add OpenGL support.
 	   - Add screenshot capability.
 	   - Try to run with "Another World" asset instead of "Out Of This World" assets.

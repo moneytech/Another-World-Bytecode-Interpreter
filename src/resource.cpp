@@ -95,6 +95,10 @@ void Resource::readEntries() {
 		memEntry->unk10 = f.readUint16BE();
 		memEntry->size = f.readUint16BE();
 
+    if (memEntry->state == MEMENTRY_STATE_END_OF_MEMLIST) {
+      break;
+    }
+
 		//Memory tracking
 		if (memEntry->packedSize==memEntry->size)
 		{
@@ -111,11 +115,6 @@ void Resource::readEntries() {
 		resourceSizeStats[STATS_TOTAL_SIZE][RES_SIZE] += memEntry->size;
 		resourceSizeStats[memEntry->type][RES_COMPRESSED] += memEntry->packedSize;
 		resourceSizeStats[STATS_TOTAL_SIZE][RES_COMPRESSED] += memEntry->packedSize;
-
-
-		if (memEntry->state == MEMENTRY_STATE_END_OF_MEMLIST) {
-			break;
-		}
 
 		debug(DBG_RES, "R:0x%02X, %-17s size=%5d (compacted gain=%2.0f%%)",
 				resourceCounter,
@@ -209,7 +208,7 @@ void Resource::loadMarkedAsNeeded() {
 			debug(DBG_BANK, "Resource::load() bufPos=%X size=%X type=%X pos=%X bankId=%X", loadDestination - _memPtrStart, me->packedSize, me->type, me->bankOffset, me->bankId);
 			readBank(me, loadDestination);
 			if(me->type == RT_POLY_ANIM) {
-				video->copyPagePtr(_vidCurPtr);
+        video->copyPage(_vidCurPtr);
 				me->state = MEMENTRY_STATE_NOT_NEEDED;
 			} else {
 				me->bufPtr = loadDestination;
@@ -399,9 +398,4 @@ void Resource::saveOrLoad(Serializer &ser) {
 			q += me->size;
 		}
 	}	
-}
-
-const char* Resource::getDataDir()
-{
-	return this->_dataDir;
 }
